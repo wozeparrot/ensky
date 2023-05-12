@@ -112,7 +112,7 @@ pub fn main() !void {
                 // if the peer has survived enough cycles we can assume that its a good endpoint
                 if (peer.cycles_survived == (PEER_TIMEOUT_SECS / CONFIG_SLEEP_SECS) + 1) {
                     slog.info("peer has survived enough cycles, assuming good endpoint", .{});
-                    setWgKeepAlive(alloc, state.interface, peer.pubkey, 30) catch {
+                    setWgKeepAlive(alloc, state.interface, peer.pubkey, 25) catch {
                         slog.warn("failed to set keepalive!", .{});
                         os.exit(1);
                     };
@@ -121,7 +121,7 @@ pub fn main() !void {
                 continue;
             } else {
                 slog.warn("peer has timed out", .{});
-                setWgKeepAlive(alloc, state.interface, peer.pubkey, 10) catch {
+                setWgKeepAlive(alloc, state.interface, peer.pubkey, 5) catch {
                     slog.warn("failed to set keepalive!", .{});
                     os.exit(1);
                 };

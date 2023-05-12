@@ -61,6 +61,11 @@
         in {
           options.services.ensky = {
             enable = mkEnableOption "ensky";
+            package = mkOption {
+              type = types.package;
+              default = pkgs.ensky;
+              description = "the ensky package to use";
+            };
 
             settings = mkOption {
               type = types.submodule {
@@ -127,7 +132,7 @@
 
               serviceConfig = {
                 Type = "simple";
-                ExecStart = "${pkgs.ensky.ensky}/bin/ensky ${configFile}";
+                ExecStart = "${cfg.package}/bin/ensky ${configFile}";
                 Restart = "always";
                 RestartSec = "10";
 
