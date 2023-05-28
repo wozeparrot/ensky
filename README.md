@@ -8,7 +8,7 @@ Written in [zig](https://ziglang.org) with zero heap allocations.
 
 ## Usage
 
-Preferred usage is via the NixOS module in (flake.nix)[flake.nix]. But it is also possible to use it standalone by manually writing the configuration JSON with the format specific in [main.zig](src/main.zig).
+Preferred usage is via the NixOS module in [flake.nix](flake.nix). But it is also possible to use it standalone by manually writing the configuration JSON with the format specific in [main.zig](src/main.zig).
 
 The gossip port must be open and the same on all machines that run ensky.
 
