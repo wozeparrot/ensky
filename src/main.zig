@@ -58,7 +58,7 @@ pub fn main() !void {
     defer config_file.close();
     var buf: [2 * 1024 * 1024]u8 = undefined;
     const len = try config_file.readAll(buf[0..]);
-    var state = try json.parseFromSlice(State, alloc, buf[0..len], .{});
+    var state = try json.parseFromSliceLeaky(State, alloc, buf[0..len], .{});
     var state_lock = std.Thread.RwLock{};
 
     // load gossip key
