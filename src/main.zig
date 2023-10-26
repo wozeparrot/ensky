@@ -151,7 +151,7 @@ pub fn main() !void {
 fn setWgEndpoint(alloc: Allocator, interface: []const u8, pubkey: []const u8, endpoint: []const u8) !void {
     const slog = log.scoped(.set_wg_endpoint);
 
-    const res = try std.ChildProcess.exec(.{
+    const res = try std.ChildProcess.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "set", interface, "peer", pubkey, "endpoint", endpoint },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -173,7 +173,7 @@ fn setWgAllowedIPs(alloc: Allocator, interface: []const u8, pubkey: []const u8, 
     const allowed_ips_str = try std.mem.join(alloc, ",", allowed_ips);
     defer alloc.free(allowed_ips_str);
 
-    const res = try std.ChildProcess.exec(.{
+    const res = try std.ChildProcess.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "set", interface, "peer", pubkey, "allowed-ips", allowed_ips_str },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -195,7 +195,7 @@ fn setWgKeepAlive(alloc: Allocator, interface: []const u8, pubkey: []const u8, k
     const keep_alive_str = try std.fmt.allocPrint(alloc, "{}", .{keep_alive});
     defer alloc.free(keep_alive_str);
 
-    const res = try std.ChildProcess.exec(.{
+    const res = try std.ChildProcess.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "set", interface, "peer", pubkey, "persistent-keepalive", keep_alive_str },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -214,7 +214,7 @@ fn setWgKeepAlive(alloc: Allocator, interface: []const u8, pubkey: []const u8, k
 fn dumpWireguard(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock) !void {
     const slog = log.scoped(.dump_wireguard);
 
-    const res = try std.ChildProcess.exec(.{
+    const res = try std.ChildProcess.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "show", state.interface, "dump" },
         .max_output_bytes = 2 * 1024 * 1024,
