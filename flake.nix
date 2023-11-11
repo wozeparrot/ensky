@@ -11,42 +11,48 @@
     flake-utils,
     zig,
   }:
-    (flake-utils.lib.eachDefaultSystem (
-      system: let
-        pkgs = import nixpkgs {
-          inherit system;
-        };
-      in {
-        packages.ensky = pkgs.stdenv.mkDerivation {
-          pname = "ensky";
-          version = "0.1.0";
+    (flake-utils.lib.eachSystem [
+        "x86_64-linux"
+        "aarch64-linux"
+        "armv7l-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ] (
+        system: let
+          pkgs = import nixpkgs {
+            inherit system;
+          };
+        in {
+          packages.ensky = pkgs.stdenv.mkDerivation {
+            pname = "ensky";
+            version = "0.1.0";
 
-          src = ./.;
+            src = ./.;
 
-          nativeBuildInputs = [
-            zig.packages.${system}.master
-          ];
+            nativeBuildInputs = [
+              zig.packages.${system}.master
+            ];
 
-          dontConfigure = true;
+            dontConfigure = true;
 
-          preBuild = ''
-            export HOME=$TMPDIR
-          '';
+            preBuild = ''
+              export HOME=$TMPDIR
+            '';
 
-          installPhase = ''
-            runHook preInstall
-            zig build -Dcpu=baseline --prefix $out install
-            runHook postInstall
-          '';
-        };
+            installPhase = ''
+              runHook preInstall
+              zig build -Dcpu=baseline --prefix $out install
+              runHook postInstall
+            '';
+          };
 
-        devShell = pkgs.mkShell {
-          nativeBuildInputs = [
-            zig.packages.${system}.master
-          ];
-        };
-      }
-    ))
+          devShell = pkgs.mkShell {
+            nativeBuildInputs = [
+              zig.packages.${system}.master
+            ];
+          };
+        }
+      ))
     // {
       nixosModules.ensky = {
         config,
