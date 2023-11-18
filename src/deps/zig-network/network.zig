@@ -36,6 +36,25 @@ pub const Address = union(AddressFamily) {
     ipv4: IPv4,
     ipv6: IPv6,
 
+    pub fn parse(string: []const u8) !Address {
+        return if (Address.IPv4.parse(string)) |ip|
+            Address{ .ipv4 = ip }
+            // TODO: Implement IPv6 parsing
+        else |_|
+            return error.InvalidFormat;
+    }
+
+    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !Address {
+        _ = allocator;
+
+        var buffer: [256]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const str = try std.json.innerParse([]const u8, fba.allocator(), source, options);
+
+        return parse(str) catch return error.UnexpectedToken;
+    }
+
     pub const IPv4 = struct {
         const Self = @This();
 
@@ -85,16 +104,27 @@ pub const Address = union(AddressFamily) {
                 ip.value[0] = try std.fmt.parseInt(u8, d0, 10);
                 ip.value[1] = try std.fmt.parseInt(u8, d1.?, 10);
                 const int = try std.fmt.parseInt(u16, d2.?, 10);
-                std.mem.writeIntBig(u16, ip.value[2..4], int);
+                std.mem.writeInt(u16, ip.value[2..4], int, .big);
             } else if (d1 != null) {
                 ip.value[0] = try std.fmt.parseInt(u8, d0, 10);
                 const int = try std.fmt.parseInt(u24, d1.?, 10);
-                std.mem.writeIntBig(u24, ip.value[1..4], int);
+                std.mem.writeInt(u24, ip.value[1..4], int, .big);
             } else {
                 const int = try std.fmt.parseInt(u32, d0, 10);
-                std.mem.writeIntBig(u32, &ip.value, int);
+                std.mem.writeInt(u32, &ip.value, int, .big);
             }
             return ip;
+        }
+
+        pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !IPv4 {
+            _ = allocator;
+
+            var buffer: [256]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+            const str = try std.json.innerParse([]const u8, fba.allocator(), source, options);
+
+            return IPv4.parse(str) catch return error.UnexpectedToken;
         }
     };
 
@@ -130,8 +160,8 @@ pub const Address = union(AddressFamily) {
             }
             const big_endian_parts: *align(1) const [8]u16 = @ptrCast(&self.value);
             const native_endian_parts = switch (builtin.target.cpu.arch.endian()) {
-                .Big => big_endian_parts.*,
-                .Little => blk: {
+                .big => big_endian_parts.*,
+                .little => blk: {
                     var buf: [8]u16 = undefined;
                     for (big_endian_parts, 0..) |part, i| {
                         buf[i] = std.mem.bigToNative(u16, part);
@@ -219,6 +249,30 @@ pub const EndPoint = struct {
 
     address: Address,
     port: u16, // Stored as native, will convert to bigEndian when moving to sockaddr
+
+    pub fn parse(string: []const u8) !EndPoint {
+        const colon_index = std.mem.indexOfScalar(u8, string, ':') orelse return error.InvalidFormat;
+
+        const address = try Address.parse(string[0..colon_index]);
+
+        const port = try std.fmt.parseInt(u16, string[colon_index + 1 ..], 10);
+
+        return EndPoint{
+            .address = address,
+            .port = port,
+        };
+    }
+
+    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !EndPoint {
+        _ = allocator;
+
+        var buffer: [256]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const str = try std.json.innerParse([]const u8, fba.allocator(), source, options);
+
+        return parse(str) catch return error.UnexpectedToken;
+    }
 
     pub fn format(value: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt;
@@ -776,7 +830,7 @@ const WindowsOSLogic = struct {
 
         fn fdSlice(self: *align(8) FdSet) []windows.ws2_32.SOCKET {
             const ptr: [*]u8 = @ptrCast(self);
-            const socket_ptr: [*]windows.ws2_32.SOCKET = @ptrCast(ptr + 4 * @sizeOf(c_uint));
+            const socket_ptr: [*]windows.ws2_32.SOCKET = @alignCast(@ptrCast(ptr + 4 * @sizeOf(c_uint)));
             return socket_ptr[0..self.size];
         }
 
@@ -799,7 +853,8 @@ const WindowsOSLogic = struct {
         }
 
         fn deinit(self: *align(8) FdSet, allocator: std.mem.Allocator) void {
-            allocator.free(self.memSlice());
+            const ptr: []align(8) u8 = @alignCast(self.memSlice());
+            allocator.free(ptr);
         }
 
         fn containsFd(self: *align(8) FdSet, fd: windows.ws2_32.SOCKET) bool {
@@ -814,7 +869,7 @@ const WindowsOSLogic = struct {
                 // Double our capacity.
                 const new_mem_size = 4 * @sizeOf(c_uint) + 2 * fd_set.*.capacity * @sizeOf(windows.ws2_32.SOCKET);
                 const ptr: []u8 align(8) = @alignCast(fd_set.*.memSlice());
-                fd_set.* = @ptrCast((try allocator.reallocAdvanced(ptr, new_mem_size, @returnAddress())).ptr);
+                fd_set.* = @alignCast(@ptrCast((try allocator.reallocAdvanced(ptr, new_mem_size, @returnAddress())).ptr));
                 fd_set.*.capacity *= 2;
             }
 
