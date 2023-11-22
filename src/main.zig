@@ -231,7 +231,7 @@ fn dumpWireguard(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock
 
     var lines_iter = std.mem.split(u8, res.stdout, "\n");
     // try to parse ourself first
-    var our_line = lines_iter.next();
+    const our_line = lines_iter.next();
     if (our_line) |line| {
         var tab_iter = std.mem.split(u8, line, "\t");
 
@@ -251,7 +251,7 @@ fn dumpWireguard(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock
 
         var tab_iter = std.mem.split(u8, line, "\t");
 
-        var pubkey = tab_iter.next().?;
+        const pubkey = tab_iter.next().?;
         slog.debug("found pubkey: {s}", .{pubkey});
         if (std.mem.eql(u8, pubkey, state.our_pubkey)) continue;
 
@@ -378,11 +378,11 @@ fn gossipRx(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock) !vo
 
         var nonce: [crypto.aead.chacha_poly.XChaCha20Poly1305.nonce_length]u8 = undefined;
         @memcpy(&nonce, msg[0..crypto.aead.chacha_poly.XChaCha20Poly1305.nonce_length]);
-        var ciphertext = msg[crypto.aead.chacha_poly.XChaCha20Poly1305.nonce_length .. msg.len - crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length];
+        const ciphertext = msg[crypto.aead.chacha_poly.XChaCha20Poly1305.nonce_length .. msg.len - crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length];
         var tag: [crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length]u8 = undefined;
         @memcpy(&tag, msg[msg.len - crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length ..]);
 
-        var plaintext = try alloc.alloc(u8, ciphertext.len);
+        const plaintext = try alloc.alloc(u8, ciphertext.len);
         crypto.aead.chacha_poly.XChaCha20Poly1305.decrypt(plaintext, ciphertext, tag, "", nonce, state.gossip_key) catch {
             slog.warn("received invalid gossip message: decryption failed", .{});
             continue;
