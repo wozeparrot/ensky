@@ -4,7 +4,7 @@ const Thread = std.Thread;
 const crypto = std.crypto;
 const json = std.json;
 const log = std.log;
-const os = std.os;
+const posix = std.posix;
 const time = std.time;
 
 const network = @import("deps/zig-network/network.zig");
@@ -52,7 +52,7 @@ pub fn main() !void {
     const config_path = args.next();
     if (config_path == null) {
         log.err("usage: {s} <config-path>", .{prog_name});
-        os.exit(1);
+        posix.exit(1);
     }
     const config_file = try std.fs.cwd().openFile(config_path.?, .{});
     defer config_file.close();
@@ -90,7 +90,7 @@ pub fn main() !void {
         slog.debug("dumping wireguard", .{});
         dumpWireguard(alloc, &state, &state_lock) catch {
             slog.err("failed to dump wireguard!", .{});
-            os.exit(1);
+            posix.exit(1);
         };
         slog.debug("we are on port: {}", .{state.our_port});
 
@@ -100,7 +100,7 @@ pub fn main() !void {
             slog.debug("configuring peer: {s}, last_handshake: {}", .{ peer.pubkey, peer.last_handshake });
             setWgAllowedIPs(alloc, state.interface, peer.pubkey, peer.allowed_ips) catch {
                 slog.warn("failed to set allowed ips!", .{});
-                os.exit(1);
+                posix.exit(1);
             };
 
             // see if this peer has timed out
@@ -113,7 +113,7 @@ pub fn main() !void {
                     slog.info("peer has survived enough cycles, assuming good endpoint", .{});
                     setWgKeepAlive(alloc, state.interface, peer.pubkey, 25) catch {
                         slog.warn("failed to set keepalive!", .{});
-                        os.exit(1);
+                        posix.exit(1);
                     };
                 }
 
@@ -122,7 +122,7 @@ pub fn main() !void {
                 slog.warn("peer has timed out", .{});
                 setWgKeepAlive(alloc, state.interface, peer.pubkey, 5) catch {
                     slog.warn("failed to set keepalive!", .{});
-                    os.exit(1);
+                    posix.exit(1);
                 };
                 peer.cycles_survived = 0;
             }
@@ -137,7 +137,7 @@ pub fn main() !void {
             slog.info("testing endpoint: {s}", .{endpoint});
             setWgEndpoint(alloc, state.interface, peer.pubkey, endpoint) catch {
                 slog.warn("failed to set endpoint!", .{});
-                os.exit(1);
+                posix.exit(1);
             };
             peer.current_endpoint = endpoint;
             peer.i = (peer.i + 1) % peer.endpoints.len;
