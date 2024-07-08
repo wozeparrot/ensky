@@ -7,7 +7,7 @@ test "Get endpoint list" {
     try network.init();
     defer network.deinit();
 
-    const endpoint_list = try network.getEndpointList(std.heap.page_allocator, "google.com", 80);
+    const endpoint_list = try network.getEndpointList(std.testing.allocator, "google.com", 80);
     defer endpoint_list.deinit();
 
     for (endpoint_list.endpoints) |endpt| {
@@ -19,14 +19,60 @@ test "Connect to an echo server" {
     try network.init();
     defer network.deinit();
 
-    const sock = try network.connectToHost(std.heap.page_allocator, "tcpbin.com", 4242, .tcp);
+    const sock = try network.connectToHost(std.testing.allocator, "tcpbin.com", 4242, .tcp);
     defer sock.close();
 
     const msg = "Hi from socket!\n";
     try sock.writer().writeAll(msg);
 
     var buf: [128]u8 = undefined;
-    std.debug.print("Echo: {s}", .{buf[0..try sock.reader().readAll(buf[0..msg.len])]});
+    const read_size = try sock.reader().readAll(buf[0..msg.len]);
+    try std.testing.expectEqualSlices(u8, msg, buf[0..read_size]);
+    std.debug.print("Echo: {s}", .{buf[0..read_size]});
+}
+
+test "Echo server readiness" {
+    try network.init();
+    defer network.deinit();
+
+    const sock = try network.connectToHost(
+        std.testing.allocator,
+        "tcpbin.com",
+        4242,
+        .tcp,
+    );
+    defer sock.close();
+
+    var write_set = try network.SocketSet.init(std.testing.allocator);
+    defer write_set.deinit();
+    var read_set = try network.SocketSet.init(std.testing.allocator);
+    defer read_set.deinit();
+
+    try write_set.add(sock, .{ .write = true, .read = false });
+    defer write_set.remove(sock);
+
+    try read_set.add(sock, .{ .write = false, .read = true });
+    defer read_set.remove(sock);
+
+    const msg = "Hi from socket!\n";
+
+    if (try network.waitForSocketEvent(&write_set, 5 * std.time.ns_per_s) != 1) {
+        return error.InvalidSocketWriteWait;
+    }
+    if (!write_set.isReadyWrite(sock)) {
+        return error.SocketNotReadyForWrite;
+    }
+    try sock.writer().writeAll(msg);
+
+    if (try network.waitForSocketEvent(&read_set, 5 * std.time.ns_per_s) != 1) {
+        return error.InvalidSocketReadWait;
+    }
+    if (!read_set.isReadyRead(sock)) {
+        return error.SocketNotReadyForRead;
+    }
+    var buf: [128]u8 = undefined;
+    const read_size = try sock.reader().readAll(buf[0..msg.len]);
+    try std.testing.expectEqualSlices(u8, msg, buf[0..read_size]);
 }
 
 test "UDP timeout" {
@@ -39,7 +85,7 @@ test "UDP timeout" {
         .address = .{ .ipv4 = network.Address.IPv4.init(1, 1, 1, 1) },
         .port = 53,
     });
-    try sock.setReadTimeout(3000000); // 3 seconds
+    try sock.setReadTimeout(3 * std.time.us_per_s);
     try std.testing.expectError(error.WouldBlock, sock.reader().readByte());
 }
 
@@ -61,6 +107,49 @@ test "IPv4 parse" {
     try std.testing.expectEqual(make(127, 10, 20, 30), try parse("127.660510"));
     try std.testing.expectEqual(make(127, 33, 10, 20), try parse("127.33.2580"));
     try std.testing.expectEqual(make(255, 255, 255, 255), try parse("255.255.255.255"));
+}
+
+test "IPv6 parse" {
+    const make = network.Address.IPv6.init;
+    const parse = network.Address.IPv6.parse;
+
+    var expected = make(.{0} ** 16, 0);
+    try std.testing.expectEqual(expected, try parse("::"));
+    try std.testing.expectEqual(expected, try parse("0:0:0:0:0:0:0:0"));
+    expected.value[15] = 1;
+    try std.testing.expectEqual(expected, try parse("::1"));
+    expected.value = .{0} ** 16;
+    expected.value[0] = 1;
+    try std.testing.expectEqual(expected, try parse("100::"));
+    expected.value[0] = 0xff;
+    expected.value[1] = 0xff;
+    expected.value[15] = 1;
+    try std.testing.expectEqual(expected, try parse("ffff::1"));
+    expected.value[0] = 0x20;
+    expected.value[1] = 0x01;
+    expected.value[2] = 0x0d;
+    expected.value[3] = 0xb8;
+    expected.value[4] = 0x0a;
+    expected.value[5] = 0x0b;
+    expected.value[6] = 0x11;
+    expected.value[7] = 0xff;
+    expected.value[15] = 0x01;
+    try std.testing.expectEqual(
+        expected,
+        try parse("2001:0db8:0a0b:11ff:0:0:0:1"),
+    );
+    try std.testing.expectEqual(expected, try parse("2001:db8:a0b:11ff::1"));
+
+    try std.testing.expectError(error.InvalidFormat, parse(":"));
+    try std.testing.expectError(error.InvalidFormat, parse(":1"));
+    try std.testing.expectError(error.InvalidFormat, parse("1"));
+    try std.testing.expectError(error.InvalidFormat, parse("0:0:0:0"));
+    try std.testing.expectError(error.InvalidFormat, parse(":::1"));
+    try std.testing.expectError(error.InvalidFormat, parse("6::2::1"));
+
+    // NOTE: The below is a valid IPv6 address with zone ID that is explicitly
+    // not parsed.
+    try std.testing.expectError(error.InvalidFormat, parse("::1%eth0"));
 }
 
 // https://github.com/MasterQ32/zig-network/issues/66
