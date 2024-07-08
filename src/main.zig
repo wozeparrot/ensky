@@ -151,7 +151,7 @@ pub fn main() !void {
 fn setWgEndpoint(alloc: Allocator, interface: []const u8, pubkey: []const u8, endpoint: []const u8) !void {
     const slog = log.scoped(.set_wg_endpoint);
 
-    const res = try std.ChildProcess.run(.{
+    const res = try std.process.Child.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "set", interface, "peer", pubkey, "endpoint", endpoint },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -173,7 +173,7 @@ fn setWgAllowedIPs(alloc: Allocator, interface: []const u8, pubkey: []const u8, 
     const allowed_ips_str = try std.mem.join(alloc, ",", allowed_ips);
     defer alloc.free(allowed_ips_str);
 
-    const res = try std.ChildProcess.run(.{
+    const res = try std.process.Child.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "set", interface, "peer", pubkey, "allowed-ips", allowed_ips_str },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -195,7 +195,7 @@ fn setWgKeepAlive(alloc: Allocator, interface: []const u8, pubkey: []const u8, k
     const keep_alive_str = try std.fmt.allocPrint(alloc, "{}", .{keep_alive});
     defer alloc.free(keep_alive_str);
 
-    const res = try std.ChildProcess.run(.{
+    const res = try std.process.Child.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "set", interface, "peer", pubkey, "persistent-keepalive", keep_alive_str },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -214,7 +214,7 @@ fn setWgKeepAlive(alloc: Allocator, interface: []const u8, pubkey: []const u8, k
 fn dumpWireguard(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock) !void {
     const slog = log.scoped(.dump_wireguard);
 
-    const res = try std.ChildProcess.run(.{
+    const res = try std.process.Child.run(.{
         .allocator = alloc,
         .argv = &[_][]const u8{ "wg", "show", state.interface, "dump" },
         .max_output_bytes = 2 * 1024 * 1024,
@@ -229,11 +229,11 @@ fn dumpWireguard(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock
     state_lock.lock();
     defer state_lock.unlock();
 
-    var lines_iter = std.mem.split(u8, res.stdout, "\n");
+    var lines_iter = std.mem.splitScalar(u8, res.stdout, '\n');
     // try to parse ourself first
     const our_line = lines_iter.next();
     if (our_line) |line| {
-        var tab_iter = std.mem.split(u8, line, "\t");
+        var tab_iter = std.mem.splitScalar(u8, line, '\t');
 
         _ = tab_iter.next();
         state.our_pubkey = tab_iter.next().?;
@@ -249,7 +249,7 @@ fn dumpWireguard(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock
     while (lines_iter.next()) |line| {
         if (line.len == 0) continue;
 
-        var tab_iter = std.mem.split(u8, line, "\t");
+        var tab_iter = std.mem.splitScalar(u8, line, '\t');
 
         const pubkey = tab_iter.next().?;
         slog.debug("found pubkey: {s}", .{pubkey});
@@ -338,7 +338,7 @@ fn gossipTx(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock) !vo
                 });
                 defer alloc.free(msg);
 
-                var colon_iter = std.mem.split(u8, p.current_endpoint, ":");
+                var colon_iter = std.mem.splitScalar(u8, p.current_endpoint, ':');
                 _ = try sock.sendTo(network.EndPoint{
                     .address = .{ .ipv4 = try network.Address.IPv4.parse(colon_iter.next().?) },
                     .port = state.gossip_port,
@@ -388,7 +388,7 @@ fn gossipRx(alloc: Allocator, state: *State, state_lock: *std.Thread.RwLock) !vo
             continue;
         };
 
-        var split_iter = std.mem.split(u8, plaintext, "|%|");
+        var split_iter = std.mem.splitSequence(u8, plaintext, "|%|");
         const pubkey = split_iter.next().?;
         const endpoint = split_iter.next().?;
         slog.debug("{s} is at {s}", .{ pubkey, endpoint });
